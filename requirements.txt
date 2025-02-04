@@ -2,3 +2,4 @@ fastapi
 sse-starlette==0.3.2
 uvicorn
 psutil
+python-dotenv

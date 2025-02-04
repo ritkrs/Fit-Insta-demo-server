@@ -12,6 +12,10 @@ import logging
 from datetime import datetime
 import psutil  # We'll use this to get system metrics
 import time
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,8 +32,8 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 CLIENTS: List[asyncio.Queue] = []
 
 # Replace these with your actual values from Meta
-APP_SECRET = "e18fff02092b87e138b6528ccfa4a1ce"
-VERIFY_TOKEN = "fitvideodemo"
+APP_SECRET = os.getenv('META_APP_SECRET')
+VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
 
 @app.get("/health")
 async def health_check():
