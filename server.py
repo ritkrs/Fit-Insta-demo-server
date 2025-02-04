@@ -87,7 +87,7 @@ async def verify_webhook(
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         logger.info("Webhook verified successfully")
         return Response(content=hub_challenge, media_type="text/plain")
-    raise HTTPException(status_code=403, detail="Verification failed, {APP_SECRET} , {VERIFY_TOKEN}")
+    raise HTTPException(status_code=403, detail="Verification failed, APP_SECRET: {}, VERIFY_TOKEN: {}".format(APP_SECRET, VERIFY_TOKEN))
 
 @app.post("/webhook")
 async def webhook(request: Request):
