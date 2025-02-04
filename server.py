@@ -27,7 +27,7 @@ app = FastAPI(title="Meta Webhook Server")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000/static/index.html"],  # Use ["http://localhost:5500"] or your actual frontend URL for security
+    allow_origins=["https://fit-insta-demo-server.onrender.com/static/index.html"],  # Use ["http://localhost:5500"] or your actual frontend URL for security
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
