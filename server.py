@@ -89,11 +89,15 @@ async def verify_webhook(
     hub_challenge: str = None
 ):
     """Handle the webhook verification request from Meta."""
+    logger.info(f"Received verification request: hub_mode={hub_mode}, hub_verify_token={hub_verify_token}, hub_challenge={hub_challenge}")
+
+    # Verify the hub_mode and hub_verify_token from Meta
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        logger.info("Webhook verified successfully")
-        # Change Response to HttpResponse
-        return HTMLResponse(content=hub_challenge, status_code=200)  # <-- Change this line
-    raise HTTPException(status_code=403, detail="Verification failed, APP_SECRET: {}, VERIFY_TOKEN: {}".format(APP_SECRET, VERIFY_TOKEN))
+        logger.info("Webhook verification successful")
+        return Response(content=hub_challenge, media_type="text/plain")
+
+    logger.error(f"Webhook verification failed: Expected hub_verify_token={VERIFY_TOKEN}, got hub_verify_token={hub_verify_token}")
+    raise HTTPException(status_code=403, detail="Verification failed")
 
 @app.post("/webhook")
 async def webhook(request: Request):
