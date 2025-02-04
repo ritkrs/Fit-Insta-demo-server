@@ -143,6 +143,12 @@ async def webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
 
+@app.get("/webhook_events")
+async def get_webhook_events():
+    """Retrieve all stored webhook events."""
+    return {"events": list(WEBHOOK_EVENTS)}
+
+
 async def event_generator(request: Request):
     """Generate Server-Sent Events."""
     client_queue = asyncio.Queue()
