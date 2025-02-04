@@ -32,8 +32,8 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 CLIENTS: List[asyncio.Queue] = []
 
 # Replace these with your actual values from Meta
-APP_SECRET = os.getenv("APP_SECRET")
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
+APP_SECRET = "e18fff02092b87e138b6528ccfa4a1ce"
+VERIFY_TOKEN = "fitvideodemo"
 
 @app.get("/health")
 async def health_check():
