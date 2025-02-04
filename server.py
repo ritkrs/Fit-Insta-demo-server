@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException,Query
 from fastapi.responses import HTMLResponse
 from sse_starlette.sse import EventSourceResponse  # This is the correct import
 from fastapi.staticfiles import StaticFiles
@@ -84,9 +84,9 @@ async def verify_webhook_signature(request: Request, raw_body: bytes) -> bool:
 @app.get("/webhook")
 async def verify_webhook(
     request: Request,
-    hub_mode: str = None,
-    hub_verify_token: str = None,
-    hub_challenge: str = None
+    hub_mode: str = Query(None, alias="hub.mode"),          # Map 'hub.mode' query param
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),  # Map 'hub.verify_token'
+    hub_challenge: str = Query(None, alias="hub.challenge") # Map 'hub.challenge'
 ):
     """Handle the webhook verification request from Meta."""
     logger.info(f"Received verification request: hub_mode={hub_mode}, hub_verify_token={hub_verify_token}, hub_challenge={hub_challenge}")
