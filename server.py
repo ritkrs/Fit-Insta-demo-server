@@ -32,8 +32,8 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 CLIENTS: List[asyncio.Queue] = []
 
 # Replace these with your actual values from Meta
-APP_SECRET = os.getenv('META_APP_SECRET')
-VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
+APP_SECRET = "e18fff02092b87e138b6528ccfa4a1ce"
+VERIFY_TOKEN = "fitvideodemo"
 
 @app.get("/health")
 async def health_check():
@@ -66,6 +66,7 @@ async def verify_webhook_signature(request: Request, raw_body: bytes) -> bool:
     """Verify that the webhook request came from Meta."""
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not signature or not signature.startswith("sha256="):
+        logger.error("Signature is missing or not properly formatted")
         return False
     
     expected_signature = hmac.new(
@@ -74,7 +75,11 @@ async def verify_webhook_signature(request: Request, raw_body: bytes) -> bool:
         hashlib.sha256
     ).hexdigest()
     
-    return hmac.compare_digest(signature[7:], expected_signature)
+    if not hmac.compare_digest(signature[7:], expected_signature):
+        logger.error(f"Signature mismatch: {signature[7:]} != {expected_signature}")
+        return False
+    
+    return True
 
 @app.get("/webhook")
 async def verify_webhook(
