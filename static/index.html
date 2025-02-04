@@ -1,45 +1,45 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webhook Events</title>
+    <title>Webhook Events Viewer</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .event { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 4px; }
-        .timestamp { color: #666; font-size: 0.9em; }
-        pre { white-space: pre-wrap; margin: 5px 0; }
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #events { margin-top: 20px; }
+        .event { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
     </style>
 </head>
 <body>
     <h1>Webhook Events</h1>
-    <div id="events"></div>
+    <div id="events">Loading events...</div>
 
     <script>
-        async function fetchWebhookEvents() {
+        async function fetchEvents() {
             try {
-                const response = await fetch('/webhook_events');
-                const events = await response.json();
-                
-                const eventsDiv = document.getElementById('events');
-                eventsDiv.innerHTML = ''; // Clear previous events
-
-                events.reverse().forEach(event => {
-                    const eventDiv = document.createElement('div');
-                    eventDiv.className = 'event';
-                    eventDiv.innerHTML = `
-                        <div class="timestamp">${event.timestamp}</div>
-                        <pre>${JSON.stringify(event.payload, null, 2)}</pre>
-                    `;
-                    eventsDiv.appendChild(eventDiv);
-                });
+                let response = await fetch('https://fit-insta-demo-server.onrender.com/webhook_events');
+                let data = await response.json();
+                displayEvents(data.events);
             } catch (error) {
-                console.error('Error fetching webhook events:', error);
+                console.error('Error fetching events:', error);
+                document.getElementById('events').innerHTML = '<p>Error loading events</p>';
             }
         }
 
-        setInterval(fetchWebhookEvents, 2000); // Poll every 2 seconds
-        fetchWebhookEvents(); // Fetch immediately on page load
+        function displayEvents(events) {
+            let container = document.getElementById('events');
+            container.innerHTML = '';
+            events.forEach(event => {
+                let div = document.createElement('div');
+                div.className = 'event';
+                div.innerHTML = `<strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
+                                <strong>Sender ID:</strong> ${event.payload.entry[0].changes[0].value.sender.id}<br>
+                                <strong>Message:</strong> ${event.payload.entry[0].changes[0].value.message.text}`;
+                container.appendChild(div);
+            });
+        }
+
+        setInterval(fetchEvents, 3000);
+        fetchEvents();
     </script>
 </body>
 </html>

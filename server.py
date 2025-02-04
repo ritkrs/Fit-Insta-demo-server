@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Response, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 from typing import List
 import hashlib
@@ -23,7 +24,17 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(title="Meta Webhook Server")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5000/static/index.html"],  # Use ["http://localhost:5500"] or your actual frontend URL for security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 START_TIME = time.time()
+
 
 # Store webhook events - using deque with max size to prevent memory issues
 WEBHOOK_EVENTS = deque(maxlen=100)
