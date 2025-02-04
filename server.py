@@ -161,6 +161,8 @@ async def home():
     <html>
     <head>
         <title>Meta Webhook Events</title>
+        <h1>{APP_SECRET}<h1>
+        <h1>{VERIFY_TOKEN}<h1>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             #events { margin-top: 20px; }
