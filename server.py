@@ -32,8 +32,8 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 CLIENTS: List[asyncio.Queue] = []
 
 # Replace these with your actual values from Meta
-APP_SECRET = "e18fff02092b87e138b6528ccfa4a1ce"
-VERIFY_TOKEN = "fitvideodemo"
+APP_SECRET = os.getenv("APP_SECRET")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 
 @app.get("/health")
 async def health_check():
@@ -96,7 +96,7 @@ async def verify_webhook(
         logger.info("Webhook verification successful")
         return Response(content=hub_challenge, media_type="text/plain")
 
-    logger.error(f"Webhook verification failed: Expected hub_verify_token={VERIFY_TOKEN}, got hub_verify_token={hub_verify_token}")
+    logger.error(f"Webhook verification failed")
     raise HTTPException(status_code=403, detail="Verification failed")
 
 @app.post("/webhook")
@@ -171,8 +171,6 @@ async def home():
     <html>
     <head>
         <title>Meta Webhook Events</title>
-        <h1>{APP_SECRET}<h1>
-        <h1>{VERIFY_TOKEN}<h1>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             #events { margin-top: 20px; }
