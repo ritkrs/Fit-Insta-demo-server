@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Events</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .event { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .timestamp { color: #666; font-size: 0.9em; }
+        pre { white-space: pre-wrap; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>Webhook Events</h1>
+    <div id="events"></div>
+
+    <script>
+        async function fetchWebhookEvents() {
+            try {
+                const response = await fetch('/webhook_events');
+                const events = await response.json();
+                
+                const eventsDiv = document.getElementById('events');
+                eventsDiv.innerHTML = ''; // Clear previous events
+
+                events.reverse().forEach(event => {
+                    const eventDiv = document.createElement('div');
+                    eventDiv.className = 'event';
+                    eventDiv.innerHTML = `
+                        <div class="timestamp">${event.timestamp}</div>
+                        <pre>${JSON.stringify(event.payload, null, 2)}</pre>
+                    `;
+                    eventsDiv.appendChild(eventDiv);
+                });
+            } catch (error) {
+                console.error('Error fetching webhook events:', error);
+            }
+        }
+
+        setInterval(fetchWebhookEvents, 2000); // Poll every 2 seconds
+        fetchWebhookEvents(); // Fetch immediately on page load
+    </script>
+</body>
+</html>
