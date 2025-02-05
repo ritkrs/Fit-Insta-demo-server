@@ -171,7 +171,7 @@ async def event_generator(request: Request):
             yield f"data: {json.dumps(event)}\n\n"
 
         # Listen for new events
-        while not request.is_disconnected():
+        while not await request.is_disconnected():
             try:
                 event = await asyncio.wait_for(client_queue.get(), timeout=30)
                 yield f"data: {json.dumps(event)}\n\n"
