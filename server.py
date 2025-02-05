@@ -45,6 +45,8 @@ CLIENTS: List[asyncio.Queue] = []
 # Webhook Credentials
 APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
+access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
+account_id = "17841472117168408"
 
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
@@ -66,6 +68,47 @@ def load_events_from_file():
         except Exception as e:
             logger.error(f"Failed to load events from file: {e}")
 
+def parse_instagram_webhook(data):
+    results = []
+    
+    for event in data.get("events", []):
+        payload = event.get("payload", {})
+        
+        for entry in payload.get("entry", []):
+            igsid = entry.get("id")
+            timestamp = entry.get("time")
+            
+            if "changes" in entry:
+                for change in entry["changes"]:
+                    if change.get("field") == "comments":
+                        value = change.get("value", {})
+                        comment_id = value.get("id")
+                        text = value.get("text")
+                        results.append({
+                            "type": "comment",
+                            "igsid": igsid,
+                            "comment_id": comment_id,
+                            "text": text,
+                            "timestamp": timestamp
+                        })
+            
+            elif "messaging" in entry:
+                for message_event in entry["messaging"]:
+                    sender_id = message_event["sender"]["id"]
+                    msg_timestamp = message_event.get("timestamp")
+                    message = message_event.get("message", {})
+                    text = message.get("text")
+                    is_echo = message.get("is_echo", False)
+                    
+                    results.append({
+                        "type": "direct_message",
+                        "igsid": sender_id,
+                        "text": text,
+                        "timestamp": msg_timestamp,
+                        "is_echo": is_echo
+                    })
+    
+    return results
 
 # Load events from file on startup
 load_events_from_file()
@@ -140,6 +183,8 @@ async def webhook(request: Request):
             "timestamp": datetime.now().isoformat(),
             "payload": payload
         }
+        parsed_data = parse_instagram_webhook(event_with_time)
+        logger.info(json.dumps(parsed_data, indent=4))
 
         WEBHOOK_EVENTS.append(event_with_time)
         save_events_to_file()  # Save to JSON file
