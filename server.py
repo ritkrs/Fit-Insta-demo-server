@@ -129,6 +129,7 @@ async def verify_webhook(
 async def webhook(request: Request):
     """Handle incoming webhook events from Meta."""
     raw_body = await request.body()
+    logger.info("Received webhook request: {raw_body}")
 
     if not await verify_webhook_signature(request, raw_body):
         raise HTTPException(status_code=403, detail="Invalid signature")
