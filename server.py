@@ -15,6 +15,7 @@ import psutil
 import time
 import os
 from dotenv import load_dotenv
+from postmsg import postmsg
 
 load_dotenv()
 
@@ -104,6 +105,7 @@ def parse_instagram_webhook(data):
                 message = messaging_event.get("message", {})
                 
                 # Comprehensive message event parsing
+                # Use .get() with a default of False for is_echo
                 message_event_details = {
                     "type": "direct_message",
                     "sender_id": sender.get("id"),
@@ -111,7 +113,9 @@ def parse_instagram_webhook(data):
                     "text": message.get("text"),
                     "message_id": message.get("mid"),
                     "timestamp": messaging_event.get("timestamp"),
-                    "entry_time": entry.get("time")
+                    "entry_time": entry.get("time"),
+                    # Add is_echo, defaulting to False if not present
+                    "is_echo": message.get("is_echo", False)
                 }
                 
                 # Add to results and log
