@@ -5,21 +5,23 @@ access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXR
 recipient_id = "1644347192955956"
 message_to_be_sent = "This is a direct message reply!"
 
-url = "https://graph.instagram.com/v21.0/me/messages"
-headers = {
-    "Authorization": f"Bearer {access_token}",
-    "Content-Type": "application/json"
-}
-json_body = {
-    "recipient": {
-        "id": recipient_id
-    },
-    "message": {
-        "text": message_to_be_sent
+def postmsg(access_token, recipient_id, message_to_be_sent):
+    url = "https://graph.instagram.com/v21.0/me/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
     }
-}
+    json_body = {
+        "recipient": {
+            "id": recipient_id
+        },
+        "message": {
+            "text": message_to_be_sent
+        }
+    }
 
-response = requests.post(url, headers=headers, json=json_body)
-data = response.json()
+    response = requests.post(url, headers=headers, json=json_body)
+    data = response.json()
+    return data
 
-print(json.dumps(data, indent=4))
+print(json.dumps(postmsg(access_token,recipient_id,message_to_be_sent), indent=4))

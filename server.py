@@ -69,44 +69,68 @@ def load_events_from_file():
             logger.error(f"Failed to load events from file: {e}")
 
 def parse_instagram_webhook(data):
+    """
+    Parse Instagram webhook events with improved error handling and comprehensive extraction.
+    
+    Args:
+        data (dict): The full webhook payload received from Meta
+    
+    Returns:
+        list: A list of parsed event dictionaries with standardized structure
+    """
     results = []
     
-    for event in data.get("events", []):
-        payload = event.get("payload", {})
+    try:
+        # Safely extract events, defaulting to empty list if not present
+        events = data.get("payload", {}).get("events", [])
         
-        for entry in payload.get("entry", []):
-            igsid = entry.get("id")
-            timestamp = entry.get("time")
+        for event in events:
+            payload = event.get("payload", {})
             
-            if "changes" in entry:
-                for change in entry["changes"]:
-                    if change.get("field") == "comments":
-                        value = change.get("value", {})
-                        comment_id = value.get("id")
-                        text = value.get("text")
-                        results.append({
-                            "type": "comment",
-                            "igsid": igsid,
-                            "comment_id": comment_id,
-                            "text": text,
-                            "timestamp": timestamp
-                        })
+            # Ensure timestamp from the original event
+            timestamp = event.get("timestamp", datetime.now().isoformat())
             
-            elif "messaging" in entry:
-                for message_event in entry["messaging"]:
-                    sender_id = message_event["sender"]["id"]
-                    msg_timestamp = message_event.get("timestamp")
-                    message = message_event.get("message", {})
-                    text = message.get("text")
-                    is_echo = message.get("is_echo", False)
-                    
-                    results.append({
-                        "type": "direct_message",
-                        "igsid": sender_id,
-                        "text": text,
-                        "timestamp": msg_timestamp,
-                        "is_echo": is_echo
-                    })
+            for entry in payload.get("entry", []):
+                # Common Instagram/Facebook Page ID
+                igsid = entry.get("id")
+                
+                # Handle comment events
+                if "changes" in entry:
+                    for change in entry["changes"]:
+                        if change.get("field") == "comments":
+                            value = change.get("value", {})
+                            parsed_comment = {
+                                "type": "comment",
+                                "igsid": igsid,
+                                "comment_id": value.get("id"),
+                                "text": value.get("text"),
+                                "sender_name": value.get("from", {}).get("name"),
+                                "timestamp": timestamp
+                            }
+                            results.append(parsed_comment)
+                
+                # Handle direct messages
+                if "messaging" in entry:
+                    for message_event in entry["messaging"]:
+                        sender = message_event.get("sender", {})
+                        message = message_event.get("message", {})
+                        
+                        parsed_message = {
+                            "type": "direct_message",
+                            "igsid": sender.get("id"),
+                            "sender_name": sender.get("name"),
+                            "text": message.get("text"),
+                            "timestamp": message.get("timestamp", timestamp),
+                            "is_echo": message.get("is_echo", False),
+                            "attachments": [
+                                att.get("type") for att in message.get("attachments", {}).get("data", [])
+                            ] if message.get("attachments") else []
+                        }
+                        results.append(parsed_message)
+    
+    except Exception as e:
+        logger.error(f"Error parsing webhook: {e}")
+        logger.error(f"Problematic payload: {json.dumps(data, indent=2)}")
     
     return results
 
@@ -172,7 +196,7 @@ async def verify_webhook(
 async def webhook(request: Request):
     """Handle incoming webhook events from Meta."""
     raw_body = await request.body()
-    logger.info("Received webhook request: {raw_body}")
+    logger.info(f"Received raw webhook payload: {raw_body.decode('utf-8')}")
 
     if not await verify_webhook_signature(request, raw_body):
         raise HTTPException(status_code=403, detail="Invalid signature")
@@ -183,8 +207,12 @@ async def webhook(request: Request):
             "timestamp": datetime.now().isoformat(),
             "payload": payload
         }
+        
+        # Parse the webhook and log results
         parsed_data = parse_instagram_webhook(event_with_time)
-        logger.info(json.dumps(parsed_data, indent=4))
+        logger.info("Parsed Webhook Events:")
+        for event in parsed_data:
+            logger.info(json.dumps(event, indent=2))
 
         WEBHOOK_EVENTS.append(event_with_time)
         save_events_to_file()  # Save to JSON file
@@ -193,8 +221,7 @@ async def webhook(request: Request):
         for client_queue in CLIENTS:
             await client_queue.put(event_with_time)
 
-        logger.info(f"Received webhook: {payload}")
-        return {"success": True}
+        return {"success": True, "parsed_events": parsed_data}
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
