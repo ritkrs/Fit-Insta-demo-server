@@ -49,6 +49,7 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
 account_id = "17841472117168408"
 
+default_dm_response = "Thanks for the message!"
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
 
@@ -212,6 +213,12 @@ async def webhook(request: Request):
             logger.info(json.dumps(event, indent=2))
         
         print(parsed_data)
+        
+        for events in parsed_data:
+            if events["type"] == "direct_message" and events["is_echo"] == False:
+                sender_id = str(event['sender_id'])
+                text_message_received = str(event['text'])
+                postmsg(access_token, sender_id, default_dm_response)
 
         WEBHOOK_EVENTS.append(event_with_time)
         save_events_to_file()  # Save to JSON file
