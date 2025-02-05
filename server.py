@@ -19,11 +19,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(title="Meta Webhook Server")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,67 +70,60 @@ def load_events_from_file():
 
 def parse_instagram_webhook(data):
     """
-    Parse Instagram webhook events with improved error handling and comprehensive extraction.
+    Parse Instagram messaging webhook events with specific handling for messaging payloads.
     
     Args:
         data (dict): The full webhook payload received from Meta
     
     Returns:
-        list: A list of parsed event dictionaries with standardized structure
+        list: A list of parsed event dictionaries
     """
     results = []
     
     try:
-        # Safely extract events, defaulting to empty list if not present
-        events = data.get("payload", {}).get("events", [])
+        # Log the entire input data for debugging
+        logger.info(f"Raw webhook data structure: {json.dumps(data, indent=2)}")
         
-        for event in events:
-            payload = event.get("payload", {})
+        # Handle different possible payload structures
+        payload = data.get("payload", data) if isinstance(data, dict) else data
+        
+        # Extract entries from payload
+        entries = payload.get("entry", [])
+        
+        logger.info(f"Number of entries found: {len(entries)}")
+        
+        for entry in entries:
+            # Log each entry for debugging
+            logger.info(f"Processing entry: {json.dumps(entry, indent=2)}")
             
-            # Ensure timestamp from the original event
-            timestamp = event.get("timestamp", datetime.now().isoformat())
-            
-            for entry in payload.get("entry", []):
-                # Common Instagram/Facebook Page ID
-                igsid = entry.get("id")
+            # Instagram Direct Messages
+            messaging_events = entry.get("messaging", [])
+            for messaging_event in messaging_events:
+                sender = messaging_event.get("sender", {})
+                recipient = messaging_event.get("recipient", {})
+                message = messaging_event.get("message", {})
                 
-                # Handle comment events
-                if "changes" in entry:
-                    for change in entry["changes"]:
-                        if change.get("field") == "comments":
-                            value = change.get("value", {})
-                            parsed_comment = {
-                                "type": "comment",
-                                "igsid": igsid,
-                                "comment_id": value.get("id"),
-                                "text": value.get("text"),
-                                "sender_name": value.get("from", {}).get("name"),
-                                "timestamp": timestamp
-                            }
-                            results.append(parsed_comment)
+                # Comprehensive message event parsing
+                message_event_details = {
+                    "type": "direct_message",
+                    "sender_id": sender.get("id"),
+                    "recipient_id": recipient.get("id"),
+                    "text": message.get("text"),
+                    "message_id": message.get("mid"),
+                    "timestamp": messaging_event.get("timestamp"),
+                    "entry_time": entry.get("time")
+                }
                 
-                # Handle direct messages
-                if "messaging" in entry:
-                    for message_event in entry["messaging"]:
-                        sender = message_event.get("sender", {})
-                        message = message_event.get("message", {})
-                        
-                        parsed_message = {
-                            "type": "direct_message",
-                            "igsid": sender.get("id"),
-                            "sender_name": sender.get("name"),
-                            "text": message.get("text"),
-                            "timestamp": message.get("timestamp", timestamp),
-                            "is_echo": message.get("is_echo", False),
-                            "attachments": [
-                                att.get("type") for att in message.get("attachments", {}).get("data", [])
-                            ] if message.get("attachments") else []
-                        }
-                        results.append(parsed_message)
+                # Add to results and log
+                results.append(message_event_details)
+                logger.info(f"Parsed message event: {json.dumps(message_event_details, indent=2)}")
     
     except Exception as e:
-        logger.error(f"Error parsing webhook: {e}")
+        logger.error(f"Comprehensive parsing error: {e}")
         logger.error(f"Problematic payload: {json.dumps(data, indent=2)}")
+    
+    # Log final results
+    logger.info(f"Total parsed events: {len(results)}")
     
     return results
 
@@ -213,6 +206,8 @@ async def webhook(request: Request):
         logger.info("Parsed Webhook Events:")
         for event in parsed_data:
             logger.info(json.dumps(event, indent=2))
+        
+        print(parsed_data)
 
         WEBHOOK_EVENTS.append(event_with_time)
         save_events_to_file()  # Save to JSON file
