@@ -16,6 +16,7 @@ import time
 import os
 from dotenv import load_dotenv
 from postmsg import postmsg
+import requests
 
 load_dotenv()
 
