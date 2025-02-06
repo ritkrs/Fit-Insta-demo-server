@@ -15,7 +15,6 @@ import psutil
 import time
 import os
 from dotenv import load_dotenv
-from postmsg import postmsg
 import requests
 from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
@@ -57,6 +56,8 @@ account_id = "17841472117168408"
 
 default_dm_response_positive = "Thanks for the message, we appreciate it!"
 default_dm_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
+default_comment_response_positive = "Thanks for the message, we appreciate it!"
+default_comment_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
 
@@ -77,9 +78,90 @@ def load_events_from_file():
         except Exception as e:
             logger.error(f"Failed to load events from file: {e}")
 
+def postmsg(access_token, recipient_id, message_to_be_sent):
+    url = "https://graph.instagram.com/v21.0/me/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    json_body = {
+        "recipient": {
+            "id": recipient_id
+        },
+        "message": {
+            "text": message_to_be_sent
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=json_body)
+    data = response.json()
+    return data
+
+def sendreply():
+    comment_id = "18089022370492854"  
+    access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
+    message_to_be_sent = "This is a comment reply!"
+
+    url = f"https://graph.instagram.com/v22.0/{comment_id}/replies"
+
+    params = {
+        "message": "Thanks a lot!",
+        "access_token": access_token
+    }
+
+    response = requests.post(url, params=params)
+    data = response.json()
+    return data
+
+def handle_comment(access_token: str, comment_data: dict):
+    """
+    Handle Instagram comment interactions.
+    """
+    try:
+        comment_text = comment_data.get('text', '')
+        sentiment = analyze_sentiment(comment_text)
+        
+        # You'll need to implement this function similar to postmsg
+        # This is a placeholder for where you'd put your comment reply logic
+        if sentiment == "Positive":
+            # Add your comment reply logic here
+            logger.info(f"Positive comment received: {comment_text}")
+            sendreply(access_token, comment_data['comment_id'], default_comment_response_positive)
+            logger.info(f"Comment reply sent: {default_comment_response_positive}")
+        
+        else:
+            logger.info(f"Negative comment received: {comment_text}")
+            sendreply(access_token, comment_data['comment_id'], default_comment_response_negative)
+            logger.info(f"Comment reply sent: {default_comment_response_negative}")
+
+    except Exception as e:
+        logger.error(f"Error handling comment: {e}")
+
+# Function to handle DM responses (modified version of your existing logic)
+def handle_dm(access_token: str, message_data: dict):
+    """
+    Handle Instagram direct message interactions.
+    """
+    try:
+        if not message_data.get("is_echo", False):  # Only respond to non-echo messages
+            sender_id = message_data.get("sender_id")
+            text_message = message_data.get("text", "")
+            
+            if analyze_sentiment(text_message) == "Positive":
+                logger.info(f"Positive DM received: {text_message}")
+                postmsg(access_token, sender_id, default_dm_response_positive)
+                logger.info(f"DM reply sent: {default_dm_response_positive}")
+            else:
+                logger.info(f"Negative DM received: {text_message}")
+                postmsg(access_token, sender_id, default_dm_response_negative)
+                logger.info(f"DM reply sent: {default_dm_response_negative}")
+                
+    except Exception as e:
+        logger.error(f"Error handling DM: {e}")
+
 def parse_instagram_webhook(data):
     """
-    Parse Instagram messaging webhook events with specific handling for messaging payloads.
+    Parse Instagram webhook events for both direct messages and comments.
     
     Args:
         data (dict): The full webhook payload received from Meta
@@ -90,8 +172,8 @@ def parse_instagram_webhook(data):
     results = []
     
     try:
-        # Log the entire input data for debugging
-        logger.info(f"Raw webhook data structure: {json.dumps(data, indent=2)}")
+        # Extract timestamp from the wrapper data
+        event_timestamp = data.get("timestamp")
         
         # Handle different possible payload structures
         payload = data.get("payload", data) if isinstance(data, dict) else data
@@ -102,40 +184,48 @@ def parse_instagram_webhook(data):
         logger.info(f"Number of entries found: {len(entries)}")
         
         for entry in entries:
-            # Log each entry for debugging
-            logger.info(f"Processing entry: {json.dumps(entry, indent=2)}")
-            
-            # Instagram Direct Messages
+            # Process Direct Messages
             messaging_events = entry.get("messaging", [])
             for messaging_event in messaging_events:
                 sender = messaging_event.get("sender", {})
                 recipient = messaging_event.get("recipient", {})
                 message = messaging_event.get("message", {})
                 
-                # Comprehensive message event parsing
-                # Use .get() with a default of False for is_echo
-                message_event_details = {
-                    "type": "direct_message",
-                    "sender_id": sender.get("id"),
-                    "recipient_id": recipient.get("id"),
-                    "text": message.get("text"),
-                    "message_id": message.get("mid"),
-                    "timestamp": messaging_event.get("timestamp"),
-                    "entry_time": entry.get("time"),
-                    # Add is_echo, defaulting to False if not present
-                    "is_echo": message.get("is_echo", False)
-                }
-                
-                # Add to results and log
-                results.append(message_event_details)
-                logger.info(f"Parsed message event: {json.dumps(message_event_details, indent=2)}")
+                if message:
+                    message_event_details = {
+                        "type": "direct_message",
+                        "sender_id": sender.get("id"),
+                        "recipient_id": recipient.get("id"),
+                        "text": message.get("text"),
+                        "message_id": message.get("mid"),
+                        "timestamp": event_timestamp,
+                        "entry_time": entry.get("time"),
+                        "is_echo": message.get("is_echo", False)
+                    }
+                    results.append(message_event_details)
+            
+            # Process Comments
+            changes = entry.get("changes", [])
+            for change in changes:
+                if change.get("field") == "comments":
+                    comment_value = change.get("value", {})
+                    if comment_value:
+                        comment_details = {
+                            "type": "comment",
+                            "comment_id": comment_value.get("id"),
+                            "text": comment_value.get("text"),
+                            "timestamp": event_timestamp,
+                            "media_id": comment_value.get("media", {}).get("id"),
+                            "media_type": comment_value.get("media", {}).get("media_product_type"),
+                            "from_username": comment_value.get("from", {}).get("username"),
+                            "from_id": comment_value.get("from", {}).get("id"),
+                            "entry_time": entry.get("time")
+                        }
+                        results.append(comment_details)
     
     except Exception as e:
-        logger.error(f"Comprehensive parsing error: {e}")
+        logger.error(f"Parsing error: {e}")
         logger.error(f"Problematic payload: {json.dumps(data, indent=2)}")
-    
-    # Log final results
-    logger.info(f"Total parsed events: {len(results)}")
     
     return results
 
@@ -144,7 +234,7 @@ def analyze_sentiment(comment_text):
     sentiment_scores = sia.polarity_scores(comment_text)
     
     # Determine sentiment based on compound score
-    if sentiment_scores['compound'] >= 0.05:
+    if sentiment_scores['compound'] > 0.05:
         sentiment = "Positive"
     else:
         sentiment = "Negative"  # Neutral sentiment will return None
@@ -225,36 +315,30 @@ async def webhook(request: Request):
             "payload": payload
         }
         
-        # Parse the webhook and log results
-        parsed_data = parse_instagram_webhook(event_with_time)
+        # Parse the webhook and get events
+        parsed_events = parse_instagram_webhook(event_with_time)
         logger.info("Parsed Webhook Events:")
-        for event in parsed_data:
+        for event in parsed_events:
             logger.info(json.dumps(event, indent=2))
-        
-        print(parsed_data)
-        
-        for events in parsed_data:
-            if events["type"] == "direct_message" and events["is_echo"] == False:
-                sender_id = str(event['sender_id'])
-                text_message_received = str(event['text'])
-                if analyze_sentiment(text_message_received) == "Positive":
-                    postmsg(access_token, sender_id, default_dm_response_positive)
-                else:
-                    postmsg(access_token, sender_id, default_dm_response_negative)
+            
+            # Handle different types of events
+            if event["type"] == "direct_message":
+                handle_dm(access_token, event)
+            elif event["type"] == "comment":
+                handle_comment(access_token, event)
 
-
+        # Store event and notify clients
         WEBHOOK_EVENTS.append(event_with_time)
-        save_events_to_file()  # Save to JSON file
+        save_events_to_file()
 
         # Notify connected SSE clients
         for client_queue in CLIENTS:
             await client_queue.put(event_with_time)
 
-        return {"success": True, "parsed_events": parsed_data}
+        return {"success": True, "parsed_events": parsed_events}
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
 
 @app.get("/webhook_events")
 async def get_webhook_events():
