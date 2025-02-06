@@ -97,15 +97,14 @@ def postmsg(access_token, recipient_id, message_to_be_sent):
     data = response.json()
     return data
 
-def sendreply():
+def sendreply(access_token, comment_id, message_to_be_sent):
     comment_id = "18089022370492854"  
     access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
-    message_to_be_sent = "This is a comment reply!"
 
     url = f"https://graph.instagram.com/v22.0/{comment_id}/replies"
 
     params = {
-        "message": "Thanks a lot!",
+        "message": message_to_be_sent,
         "access_token": access_token
     }
 
