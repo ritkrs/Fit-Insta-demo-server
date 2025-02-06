@@ -185,7 +185,7 @@ def analyze_sentiment(comment_text):
     sentiment_scores = sia.polarity_scores(comment_text)
     
     # Determine sentiment based on compound score
-    if sentiment_scores['compound'] > 0.05:
+    if sentiment_scores['compound'] > 0.25:
         sentiment = "Positive"
     else:
         sentiment = "Negative"  # Neutral sentiment will return None
