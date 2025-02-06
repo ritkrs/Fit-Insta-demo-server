@@ -273,7 +273,7 @@ async def webhook(request: Request):
             logger.info(json.dumps(event, indent=2))
             
             # Handle different types of events
-            if event["type"] == "direct_message":
+            if event["type"] == "direct_message" and event["is_echo"] == False:
                 # Analyze sentiment of the message
                 sentiment = analyze_sentiment(event["text"])
                 if sentiment == "Positive":
@@ -282,7 +282,7 @@ async def webhook(request: Request):
                     message_to_be_sent = default_dm_response_negative
                 postmsg(access_token, event["sender_id"], message_to_be_sent)
                 
-            elif event["type"] == "comment":
+            elif event["type"] == "comment" and event["from_id"] != account_id:
                 # Analyze sentiment of the comment
                 sentiment = analyze_sentiment(event["text"])
                 if sentiment == "Positive":
