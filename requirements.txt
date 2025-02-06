@@ -4,3 +4,4 @@ uvicorn
 psutil
 python-dotenv
 requests
+nltk

@@ -17,6 +17,11 @@ import os
 from dotenv import load_dotenv
 from postmsg import postmsg
 import requests
+from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
+
+# Download required data (only once)
+nltk.download('vader_lexicon')
 
 load_dotenv()
 
@@ -50,7 +55,8 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
 account_id = "17841472117168408"
 
-default_dm_response = "Thanks for the message!"
+default_dm_response_positive = "Thanks for the message, we appreciate it!"
+default_dm_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
 
@@ -132,6 +138,18 @@ def parse_instagram_webhook(data):
     logger.info(f"Total parsed events: {len(results)}")
     
     return results
+
+def analyze_sentiment(comment_text):
+    sia = SentimentIntensityAnalyzer()
+    sentiment_scores = sia.polarity_scores(comment_text)
+    
+    # Determine sentiment based on compound score
+    if sentiment_scores['compound'] >= 0.05:
+        sentiment = "Positive"
+    else:
+        sentiment = "Negative"  # Neutral sentiment will return None
+
+    return sentiment
 
 # Load events from file on startup
 load_events_from_file()
@@ -219,7 +237,11 @@ async def webhook(request: Request):
             if events["type"] == "direct_message" and events["is_echo"] == False:
                 sender_id = str(event['sender_id'])
                 text_message_received = str(event['text'])
-                postmsg(access_token, sender_id, default_dm_response)
+                if analyze_sentiment(text_message_received) == "Positive":
+                    postmsg(access_token, sender_id, default_dm_response_positive)
+                else:
+                    postmsg(access_token, sender_id, default_dm_response_negative)
+
 
         WEBHOOK_EVENTS.append(event_with_time)
         save_events_to_file()  # Save to JSON file
