@@ -97,15 +97,11 @@ def postmsg(access_token, recipient_id, message_to_be_sent):
     data = response.json()
     return data
 
-def sendreply():
-    comment_id = "18089022370492854"  
-    access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
-    message_to_be_sent = "This is a comment reply!"
-
+def sendreply(access_token, comment_id, message_to_be_sent):
     url = f"https://graph.instagram.com/v22.0/{comment_id}/replies"
 
     params = {
-        "message": "Thanks a lot!",
+        "message": message_to_be_sent,
         "access_token": access_token
     }
 
@@ -113,51 +109,6 @@ def sendreply():
     data = response.json()
     return data
 
-def handle_comment(access_token: str, comment_data: dict):
-    """
-    Handle Instagram comment interactions.
-    """
-    try:
-        comment_text = comment_data.get('text', '')
-        sentiment = analyze_sentiment(comment_text)
-        
-        # You'll need to implement this function similar to postmsg
-        # This is a placeholder for where you'd put your comment reply logic
-        if sentiment == "Positive":
-            # Add your comment reply logic here
-            logger.info(f"Positive comment received: {comment_text}")
-            sendreply(access_token, comment_data['comment_id'], default_comment_response_positive)
-            logger.info(f"Comment reply sent: {default_comment_response_positive}")
-        
-        else:
-            logger.info(f"Negative comment received: {comment_text}")
-            sendreply(access_token, comment_data['comment_id'], default_comment_response_negative)
-            logger.info(f"Comment reply sent: {default_comment_response_negative}")
-
-    except Exception as e:
-        logger.error(f"Error handling comment: {e}")
-
-# Function to handle DM responses (modified version of your existing logic)
-def handle_dm(access_token: str, message_data: dict):
-    """
-    Handle Instagram direct message interactions.
-    """
-    try:
-        if not message_data.get("is_echo", False):  # Only respond to non-echo messages
-            sender_id = message_data.get("sender_id")
-            text_message = message_data.get("text", "")
-            
-            if analyze_sentiment(text_message) == "Positive":
-                logger.info(f"Positive DM received: {text_message}")
-                postmsg(access_token, sender_id, default_dm_response_positive)
-                logger.info(f"DM reply sent: {default_dm_response_positive}")
-            else:
-                logger.info(f"Negative DM received: {text_message}")
-                postmsg(access_token, sender_id, default_dm_response_negative)
-                logger.info(f"DM reply sent: {default_dm_response_negative}")
-                
-    except Exception as e:
-        logger.error(f"Error handling DM: {e}")
 
 def parse_instagram_webhook(data):
     """
@@ -323,9 +274,22 @@ async def webhook(request: Request):
             
             # Handle different types of events
             if event["type"] == "direct_message":
-                handle_dm(access_token, event)
+                # Analyze sentiment of the message
+                sentiment = analyze_sentiment(event["text"])
+                if sentiment == "Positive":
+                    message_to_be_sent = default_dm_response_positive
+                else:
+                    message_to_be_sent = default_dm_response_negative
+                postmsg(access_token, event["sender_id"], message_to_be_sent)
+                
             elif event["type"] == "comment":
-                handle_comment(access_token, event)
+                # Analyze sentiment of the comment
+                sentiment = analyze_sentiment(event["text"])
+                if sentiment == "Positive":
+                    message_to_be_sent = default_comment_response_positive
+                else:
+                    message_to_be_sent = default_comment_response_negative
+                sendreply(access_token, event["comment_id"], message_to_be_sent)
 
         # Store event and notify clients
         WEBHOOK_EVENTS.append(event_with_time)
