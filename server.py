@@ -66,8 +66,8 @@ WEBHOOK_FILE = "webhook_events.json"
 
 
 # --- Celery Setup ---
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")  # Use environment variable
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")  # and sensible defaults
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")  # Use environment variable
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")  # and sensible defaults
 
 celery = Celery(__name__, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 celery.conf.update(
@@ -327,7 +327,7 @@ async def webhook(request: Request):
                     message_to_be_sent = default_dm_response_negative
 
                 # Schedule the DM task
-                delay = random.randint(10 * 60, 25 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(1 * 60, 3 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_dm.apply_async(
                     args=(access_token, event["sender_id"], message_to_be_sent),
                     countdown=delay,
