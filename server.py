@@ -10,7 +10,7 @@ import json
 import asyncio
 from collections import deque
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import psutil
 import time
 import os
@@ -18,6 +18,9 @@ from dotenv import load_dotenv
 import requests
 from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
+
+from celery import Celery
+import random
 
 # Download required data (only once)
 nltk.download('vader_lexicon')
@@ -33,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,8 +54,8 @@ CLIENTS: List[asyncio.Queue] = []
 # Webhook Credentials
 APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
-access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
-account_id = "17841472117168408"
+access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"  # Replace with your actual token
+account_id = "17841472117168408"  # Replace
 
 default_dm_response_positive = "Thanks for the message, we appreciate it!"
 default_dm_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
@@ -60,6 +63,45 @@ default_comment_response_positive = "Thanks for the message, we appreciate it!"
 default_comment_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
+
+
+# --- Celery Setup ---
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")  # Use environment variable
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")  # and sensible defaults
+
+celery = Celery(__name__, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+celery.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='UTC',  # Set a consistent timezone
+    enable_utc=True,
+)
+
+
+@celery.task(name="send_delayed_dm")
+def send_delayed_dm(access_token, recipient_id, message_to_be_sent):
+    """Sends a delayed direct message."""
+    try:
+        result = postmsg(access_token, recipient_id, message_to_be_sent)
+        logger.info(f"DM sent to {recipient_id}.  Result: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Error sending DM to {recipient_id}: {e}")
+        raise  # Re-raise the exception for Celery to handle retries (if configured)
+
+
+@celery.task(name="send_delayed_reply")
+def send_delayed_reply(access_token, comment_id, message_to_be_sent):
+    """Sends a delayed reply to a comment."""
+    try:
+        result = sendreply(access_token, comment_id, message_to_be_sent)
+        logger.info(f"Reply sent to comment {comment_id}. Result: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Error sending reply to comment {comment_id}: {e}")
+        raise  # Important: Re-raise for Celery retry handling.
+
 
 
 def save_events_to_file():
@@ -113,27 +155,27 @@ def sendreply(access_token, comment_id, message_to_be_sent):
 def parse_instagram_webhook(data):
     """
     Parse Instagram webhook events for both direct messages and comments.
-    
+
     Args:
         data (dict): The full webhook payload received from Meta
-    
+
     Returns:
         list: A list of parsed event dictionaries
     """
     results = []
-    
+
     try:
         # Extract timestamp from the wrapper data
         event_timestamp = data.get("timestamp")
-        
+
         # Handle different possible payload structures
         payload = data.get("payload", data) if isinstance(data, dict) else data
-        
+
         # Extract entries from payload
         entries = payload.get("entry", [])
-        
+
         logger.info(f"Number of entries found: {len(entries)}")
-        
+
         for entry in entries:
             # Process Direct Messages
             messaging_events = entry.get("messaging", [])
@@ -141,7 +183,7 @@ def parse_instagram_webhook(data):
                 sender = messaging_event.get("sender", {})
                 recipient = messaging_event.get("recipient", {})
                 message = messaging_event.get("message", {})
-                
+
                 if message:
                     message_event_details = {
                         "type": "direct_message",
@@ -154,7 +196,7 @@ def parse_instagram_webhook(data):
                         "is_echo": message.get("is_echo", False)
                     }
                     results.append(message_event_details)
-            
+
             # Process Comments
             changes = entry.get("changes", [])
             for change in changes:
@@ -173,17 +215,17 @@ def parse_instagram_webhook(data):
                             "entry_time": entry.get("time")
                         }
                         results.append(comment_details)
-    
+
     except Exception as e:
         logger.error(f"Parsing error: {e}")
         logger.error(f"Problematic payload: {json.dumps(data, indent=2)}")
-    
+
     return results
 
 def analyze_sentiment(comment_text):
     sia = SentimentIntensityAnalyzer()
     sentiment_scores = sia.polarity_scores(comment_text)
-    
+
     # Determine sentiment based on compound score
     if sentiment_scores['compound'] > 0.25:
         sentiment = "Positive"
@@ -265,13 +307,13 @@ async def webhook(request: Request):
             "timestamp": datetime.now().isoformat(),
             "payload": payload
         }
-        
+
         # Parse the webhook and get events
         parsed_events = parse_instagram_webhook(event_with_time)
         logger.info("Parsed Webhook Events:")
         for event in parsed_events:
             logger.info(json.dumps(event, indent=2))
-            
+
             # Handle different types of events
             if event["type"] == "direct_message" and event["is_echo"] == False:
                 # Analyze sentiment of the message
@@ -280,8 +322,15 @@ async def webhook(request: Request):
                     message_to_be_sent = default_dm_response_positive
                 else:
                     message_to_be_sent = default_dm_response_negative
-                postmsg(access_token, event["sender_id"], message_to_be_sent)
-                
+
+                # Schedule the DM task
+                delay = random.randint(10 * 60, 25 * 60)  # 10 to 25 minutes in seconds
+                send_delayed_dm.apply_async(
+                    args=(access_token, event["sender_id"], message_to_be_sent),
+                    countdown=delay,
+                )
+                logger.info(f"Scheduled DM task for sender {event['sender_id']} in {delay} seconds")
+
             elif event["type"] == "comment" and event["from_id"] != account_id:
                 # Analyze sentiment of the comment
                 sentiment = analyze_sentiment(event["text"])
@@ -289,7 +338,15 @@ async def webhook(request: Request):
                     message_to_be_sent = default_comment_response_positive
                 else:
                     message_to_be_sent = default_comment_response_negative
-                sendreply(access_token, event["comment_id"], message_to_be_sent)
+
+                # Schedule the reply task
+                delay = random.randint(10 * 60, 25 * 60)  # 10 to 25 minutes in seconds
+                send_delayed_reply.apply_async(
+                    args=(access_token, event["comment_id"], message_to_be_sent),
+                    countdown=delay,
+                )
+                logger.info(f"Scheduled reply task for comment {event['comment_id']} in {delay} seconds")
+
 
         # Store event and notify clients
         WEBHOOK_EVENTS.append(event_with_time)
