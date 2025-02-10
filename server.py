@@ -237,6 +237,9 @@ def analyze_sentiment(comment_text):
 # Load events from file on startup
 load_events_from_file()
 
+@app.get("/ping")
+def ping():
+    return {"message": "Server is active"}
 
 @app.get("/health")
 async def health_check():
@@ -340,7 +343,7 @@ async def webhook(request: Request):
                     message_to_be_sent = default_comment_response_negative
 
                 # Schedule the reply task
-                delay = random.randint(10 * 60, 25 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(5 * 60, 20 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_reply.apply_async(
                     args=(access_token, event["comment_id"], message_to_be_sent),
                     countdown=delay,
