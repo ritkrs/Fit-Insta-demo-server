@@ -327,10 +327,10 @@ async def webhook(request: Request):
                     message_to_be_sent = default_dm_response_negative
 
                 # Schedule the DM task
-                delay = random.randint(1 * 60, 3 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_dm.apply_async(
                     args=(access_token, event["sender_id"], message_to_be_sent),
-                    countdown=delay,
+                    countdown=delay, expires=delay+60
                 )
                 logger.info(f"Scheduled DM task for sender {event['sender_id']} in {delay} seconds")
 
@@ -343,10 +343,10 @@ async def webhook(request: Request):
                     message_to_be_sent = default_comment_response_negative
 
                 # Schedule the reply task
-                delay = random.randint(5 * 60, 20 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_reply.apply_async(
                     args=(access_token, event["comment_id"], message_to_be_sent),
-                    countdown=delay,
+                    countdown=delay,expires=delay+60
                 )
                 logger.info(f"Scheduled reply task for comment {event['comment_id']} in {delay} seconds")
 
