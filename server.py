@@ -56,13 +56,13 @@ APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"  # Replace with your actual token
 account_id = "17841472117168408"  # Replace
-gemini_api_key = "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE"
+gemini_api_key = os.getenv("GEMINI_API_KEY") # Use environment variable, replace default
 model_name = "gemini-1.5-flash"
 
-default_dm_response_positive = "Thanks for the message, we appreciate it!"
-default_dm_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
-default_comment_response_positive = "Thanks for the message, we appreciate it!"
-default_comment_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
+default_dm_response_positive = "Thanks for your kind words! We appreciate your support."
+default_dm_response_negative = "We are sorry to hear you're not satisfied. Please tell us more so we can improve."
+default_comment_response_positive = "Thanks for your kind words! We appreciate your support."
+default_comment_response_negative = "We are sorry to hear you're not satisfied. Please tell us more so we can improve."
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
 
@@ -96,12 +96,27 @@ def send_dm(conversation_id_to_process, message_queue_snapshot):  # Pass convers
         recipient_id = messages[0]["sender_id"]
         combined_text = "\n".join([msg["text"] for msg in messages])
 
+        sentiment = analyze_sentiment(combined_text) # Analyze sentiment BEFORE LLM call
+        logger.info(f"Sentiment Analysis Result: Sentiment: {sentiment}, Combined Text: '{combined_text}'")
+
+        if sentiment == "Positive":
+            llm_prompt_suffix = "Respond with a very enthusiastic and thankful tone, acknowledging the compliment. Keep it concise and friendly."
+        elif sentiment == "Negative":
+            llm_prompt_suffix = "Respond with an apologetic and helpful tone, asking for more details about the issue so we can improve. Keep it concise and professional."
+        else: # Neutral or mixed sentiment
+            llm_prompt_suffix = "Respond in a helpful and neutral tone. Keep it concise and informative."
+
+        system_prompt_content = ""
+        with open("system_prompt.txt", "r") as file:
+            system_prompt_content = file.read().strip()
+        full_prompt = system_prompt_content + " Message/Conversation: " + combined_text + " " + llm_prompt_suffix
+
+
         # Generate response using LLM
         try:
-            response_text = llm_response(gemini_api_key, model_name, combined_text)
+            response_text = llm_response(gemini_api_key, model_name, full_prompt)
         except Exception as e:
             logger.error(f"Error generating LLM response: {e}")
-            sentiment = analyze_sentiment(combined_text)
             if sentiment == "Positive":
                 response_text = default_dm_response_positive
             else:
@@ -163,15 +178,9 @@ def load_events_from_file():
 
 def llm_response(api_key, model_name, query):
     """Generates response using Google Gemini API."""
-    with open("system_prompt.txt", "r") as file:
-        system_prompt = file.read().strip()
-
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
-    prompt_text = f"""
-    {system_prompt} Message/Conversation sent by user: {query}
-    """
-    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+    payload = {"contents": [{"parts": [{"text": query}]}]} # Use the full prompt directly
     try:
         response = requests.post(url, headers=headers, json=payload)
         if response.ok:
