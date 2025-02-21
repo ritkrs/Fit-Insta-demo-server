@@ -25,7 +25,7 @@ import random
 # Download required data (only once)
 nltk.download('vader_lexicon')
 
-load_dotenv()
+from dotenv import load_dotenv
 
 # Configure logging
 
@@ -51,7 +51,6 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 # Store SSE clients
 CLIENTS: List[asyncio.Queue] = []
 
-# Webhook Credentials
 APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 INSTAGRAM_ACCESS_TOKEN = os.getenv(
@@ -61,8 +60,6 @@ INSTAGRAM_ACCESS_TOKEN = os.getenv(
 INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "17841472117168408")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
-
-model_name = "gemini-1.5-flash"
 
 default_dm_response_positive = "Thanks for your kind words! We appreciate your support."
 default_dm_response_negative = "We are sorry to hear you're not satisfied. Please tell us more about this so that we can improve."
