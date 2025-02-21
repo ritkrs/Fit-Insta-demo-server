@@ -56,6 +56,7 @@ APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"  # Replace with your actual token
 account_id = "17841472117168408"  # Replace
+openrouter_mistaralnemo_api_key = "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"
 
 default_dm_response_positive = "Thanks for the message, we appreciate it!"
 default_dm_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
@@ -119,6 +120,36 @@ def load_events_from_file():
                 WEBHOOK_EVENTS.extend(events)
         except Exception as e:
             logger.error(f"Failed to load events from file: {e}")
+
+def llm_response(text):
+    # Read the system prompt from the text file
+    with open("system_prompt.txt", "r") as file:
+        system_prompt = file.read().strip()
+
+    response = requests.post(
+        url="https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": "Bearer " + openrouter_mistaralnemo_api_key,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "",  # Optional. Site URL for rankings on openrouter.ai.
+            "X-Title": "",  # Optional. Site title for rankings on openrouter.ai.
+        },
+        data=json.dumps({
+            "model": "mistralai/mistral-nemo:free",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ],
+        })
+    )
+    return response.json()["choices"][0]["message"]["content"]
+
 
 def postmsg(access_token, recipient_id, message_to_be_sent):
     url = "https://graph.instagram.com/v21.0/me/messages"
@@ -294,34 +325,42 @@ async def verify_webhook(
     logger.error("Webhook verification failed")
     raise HTTPException(status_code=403, detail="Verification failed")
 
-
-PENDING_DM = {}
-
-GROUPING_WINDOW = 30
-
-async def send_grouped_dm(sender_id: str):
+message_queue = {}
+@celery.task(name="send_dm")
+def send_dm(message_queue):
     try:
-        await asyncio.sleep(GROUPING_WINDOW)
-    except asyncio.CancelledError:
-        return
+        for conversation_id, messages in message_queue.items():
+            if not messages:
+                continue
 
-    pending = PENDING_DM.get(sender_id)
-    if not pending:
-        return  # No pending DM found.
+            # Get recipient ID from the first message
+            recipient_id = messages[0]["sender_id"]
 
-    messages = pending.get("messages", [])
-    sentiments = [analyze_sentiment(msg["text"]) for msg in messages if msg.get("text")]
-    aggregated_sentiment = "Positive" if sentiments and all(s == "Positive" for s in sentiments) else "Negative"
+            # Combine all messages from the same conversation
+            combined_text = "\n".join([msg["text"] for msg in messages])
 
-    if aggregated_sentiment == "Positive":
-        message_to_be_sent = default_dm_response_positive
-    else:
-        message_to_be_sent = default_dm_response_negative
+            # Generate response using LLM (assuming llm_response function exists)
+            try:
+                response = llm_response(combined_text)
+            except Exception as e:
+                logger.error(f"Error generating LLM response: {e}")
+                response = default_dm_response_positive  # Fallback response
 
-    send_delayed_dm.delay(access_token, sender_id, message_to_be_sent)
-    logger.info(f"Sending grouped DM to {sender_id} for {len(messages)} messages. Sent: {message_to_be_sent}")
+            # Send the combined response
+            try:
+                result = postmsg(access_token, recipient_id, response)
+                logger.info(f"Sent combined response to {recipient_id}. Result: {result}")
+            except Exception as e:
+                logger.error(f"Error sending message to {recipient_id}: {e}")
 
-    PENDING_DM.pop(sender_id, None)
+        return {"status": "success", "processed_conversations": len(message_queue)}
+
+    except Exception as e:
+        logger.error(f"Error in send_dm task: {e}")
+        raise
+    finally:
+        # Clear the message queue after processing
+        message_queue.clear()
 
 
 @app.post("/webhook")
@@ -345,26 +384,30 @@ async def webhook(request: Request):
         logger.info("Parsed Webhook Events:")
         for event in parsed_events:
             logger.info(json.dumps(event, indent=2))
-            direct_message = {}
+
+            # Handle different types of events
             if event["type"] == "direct_message" and event["is_echo"] == False:
-                sender_id = event["sender_id"]
-
-                # Update grouping info in PENDING_DM
-                if sender_id not in PENDING_DM:
-                    # Create a new grouping entry if none exists.
-                    PENDING_DM[sender_id] = {
-                        "messages": [event],
-                        "task": None
-                    }
+                # Analyze sentiment of the message
+#                sentiment = analyze_sentiment(event["text"])
+#                if sentiment == "Positive":
+#                    message_to_be_sent = default_dm_response_positive
+#                else:
+#                    message_to_be_sent = default_dm_response_negative
+#
+#                # Schedule the DM task
+#                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
+#                send_delayed_dm.apply_async(
+#                    args=(access_token, event["sender_id"], message_to_be_sent),
+#                    countdown=delay, expires=delay+60
+#                )
+                temp = event["sender_id"] + event["reciver_id"]
+                if message_queue[temp] is None:
+                    message_queue[temp] = [event]
                 else:
-                    PENDING_DM[sender_id]["messages"].append(event)
-                    task = PENDING_DM[sender_id].get("task")
-                    if task and not task.done():
-                        task.cancel()
-
-                PENDING_DM[sender_id]["task"] = asyncio.create_task(send_grouped_dm(sender_id))
-                logger.info(f"Updated pending DM grouping for sender {sender_id}. Total messages in group: {len(PENDING_DM[sender_id]['messages'])}")
-
+                    message_queue[temp].push(event)
+                if len(message_queue) == 1 and len(next(iter(message_queue.values()))) == 1:
+                    send_dm.apply_async(args = (message_queue),countdown = delay, expires=delay+60)
+                    logger.info(f"Scheduled DM task for sender {event['sender_id']} in {delay} seconds")
 
             elif event["type"] == "comment" and event["from_id"] != account_id:
                 # Analyze sentiment of the comment
