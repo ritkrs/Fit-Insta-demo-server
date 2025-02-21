@@ -57,7 +57,6 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"  # Replace with your actual token
 account_id = "17841472117168408"  # Replace
 gemini_api_key = os.getenv("GEMINI_API_KEY","AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE")
- # Use environment variable, replace default
 gemini_api_key = "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE"
 model_name = "gemini-1.5-flash"
 
