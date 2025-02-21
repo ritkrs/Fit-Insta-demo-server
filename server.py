@@ -123,6 +123,7 @@ def load_events_from_file():
 
 def llm_response(text):
     # Read the system prompt from the text file
+    '''
     with open("system_prompt.txt", "r") as file:
         system_prompt = file.read().strip()
 
@@ -149,7 +150,8 @@ def llm_response(text):
         })
     )
     return response.json()["choices"][0]["message"]["content"]
-
+    '''
+    return "This is a placeholder response."
 
 def postmsg(access_token, recipient_id, message_to_be_sent):
     url = "https://graph.instagram.com/v21.0/me/messages"
