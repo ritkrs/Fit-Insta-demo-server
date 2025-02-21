@@ -69,7 +69,7 @@ WEBHOOK_FILE = "webhook_events.json"
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")  # Use environment variable
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")  # and sensible defaults
 
-celery = Celery(_name_, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+celery = Celery(__name__, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 celery.conf.update(
     task_serializer='json',
     accept_content=['json'],
@@ -434,6 +434,6 @@ async def events(request: Request):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
