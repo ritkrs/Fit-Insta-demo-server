@@ -51,12 +51,15 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 # Store SSE clients
 CLIENTS: List[asyncio.Queue] = []
 
-APP_SECRET = os.getenv("APP_SECRET")
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
-INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-model_name = "gemini-1.5-flash"
+APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
+INSTAGRAM_ACCESS_TOKEN = os.getenv(
+    "INSTAGRAM_ACCESS_TOKEN", 
+    "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
+)
+INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "17841472117168408")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
 default_dm_response_positive = "Thanks for your kind words! We appreciate your support."
 default_dm_response_negative = "We are sorry to hear you're not satisfied. Please tell us more about this so that we can improve."
