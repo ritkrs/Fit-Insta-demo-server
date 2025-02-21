@@ -384,7 +384,7 @@ async def webhook(request: Request):
             logger.info(json.dumps(event, indent=2))
 
             # Handle different types of events
-            if event["type"] == "direct_message" and event["sender_id"] != account_id and event["is_echo"] == False:
+            if event["type"] == "direct_message" and event["recipient_id"] == account_id and event["is_echo"] == False:
                 # Analyze sentiment of the message
 #                sentiment = analyze_sentiment(event["text"])
 #                if sentiment == "Positive":
