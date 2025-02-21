@@ -80,17 +80,56 @@ celery.conf.update(
     enable_utc=True,
 )
 
+message_queue = {}  # Store messages per conversation_id
+conversation_task_schedules = {}  # Track scheduled task IDs per conversation
 
-@celery.task(name="send_delayed_dm")
-def send_delayed_dm(access_token, recipient_id, message_to_be_sent):
-    """Sends a delayed direct message."""
+
+@celery.task(name="send_dm")
+def send_dm(conversation_id_to_process, message_queue_snapshot):  # Pass conversation_id and snapshot
+    """Celery task to process and respond to a conversation's messages."""
     try:
-        result = postmsg(access_token, recipient_id, message_to_be_sent)
-        logger.info(f"DM sent to {recipient_id}.  Result: {result}")
-        return result
+        if conversation_id_to_process not in message_queue_snapshot or not message_queue_snapshot[conversation_id_to_process]:
+            logger.info(f"No messages to process for conversation: {conversation_id_to_process}. Task exiting.")
+            return {"status": "no_messages_to_process", "conversation_id": conversation_id_to_process}
+
+        messages = message_queue_snapshot[conversation_id_to_process]  # Use the snapshot
+        recipient_id = messages[0]["sender_id"]
+        combined_text = "\n".join([msg["text"] for msg in messages])
+
+        # Generate response using LLM
+        try:
+            response_text = llm_response(gemini_api_key, model_name, combined_text)
+        except Exception as e:
+            logger.error(f"Error generating LLM response: {e}")
+            sentiment = analyze_sentiment(combined_text)
+            if sentiment == "Positive":
+                response_text = default_dm_response_positive
+            else:
+                response_text = default_dm_response_negative
+
+        # Send the combined response
+        try:
+            result = postmsg(access_token, recipient_id, response_text)
+            logger.info(f"Sent combined response to {recipient_id}. Result: {result}")
+        except Exception as e:
+            logger.error(f"Error sending message to {recipient_id}: {e}")
+
+        # Clear ONLY for the processed conversation ID (after processing is successful)
+        if conversation_id_to_process in message_queue:  # Double check before deleting (race condition safety)
+            del message_queue[conversation_id_to_process]
+            logger.info(f"Cleared message queue for conversation: {conversation_id_to_process}")
+        else:
+            logger.warning(f"Conversation ID {conversation_id_to_process} not found in message_queue during clear. Possible race condition.")
+
+        # Clear task schedule after successful processing
+        if conversation_id_to_process in conversation_task_schedules:
+            del conversation_task_schedules[conversation_id_to_process]
+
+        return {"status": "success", "processed_conversation": conversation_id_to_process, "message_count": len(messages)}
+
     except Exception as e:
-        logger.error(f"Error sending DM to {recipient_id}: {e}")
-        raise  # Re-raise the exception for Celery to handle retries (if configured)
+        logger.error(f"Error in send_dm task for conversation {conversation_id_to_process}: {e}")
+        raise
 
 
 @celery.task(name="send_delayed_reply")
@@ -103,7 +142,6 @@ def send_delayed_reply(access_token, comment_id, message_to_be_sent):
     except Exception as e:
         logger.error(f"Error sending reply to comment {comment_id}: {e}")
         raise  # Important: Re-raise for Celery retry handling.
-
 
 
 def save_events_to_file():
@@ -122,7 +160,9 @@ def load_events_from_file():
         except Exception as e:
             logger.error(f"Failed to load events from file: {e}")
 
+
 def llm_response(api_key, model_name, query):
+    """Generates response using Google Gemini API."""
     with open("system_prompt.txt", "r") as file:
         system_prompt = file.read().strip()
 
@@ -139,13 +179,15 @@ def llm_response(api_key, model_name, query):
             if 'candidates' in response_json and response_json['candidates']:
                 return response_json['candidates'][0]['content']['parts'][0]['text']
             else:
-                return Exception("No candidates found in the response.")
+                raise Exception("No candidates found in the response.")
         else:
-            return Exception(f"Error: {response.status_code}\n{response.text}")
+            raise Exception(f"Error: {response.status_code}\n{response.text}")
     except Exception as e:
-        return Exception(f"An error occurred: {str(e)}")
+        raise Exception(f"An error occurred: {str(e)}")
+
 
 def postmsg(access_token, recipient_id, message_to_be_sent):
+    """Sends a direct message to Instagram."""
     url = "https://graph.instagram.com/v21.0/me/messages"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -164,7 +206,9 @@ def postmsg(access_token, recipient_id, message_to_be_sent):
     data = response.json()
     return data
 
+
 def sendreply(access_token, comment_id, message_to_be_sent):
+    """Sends a reply to an Instagram comment."""
     url = f"https://graph.instagram.com/v22.0/{comment_id}/replies"
 
     params = {
@@ -247,7 +291,9 @@ def parse_instagram_webhook(data):
 
     return results
 
+
 def analyze_sentiment(comment_text):
+    """Analyzes sentiment of text using NLTK's VADER."""
     sia = SentimentIntensityAnalyzer()
     sentiment_scores = sia.polarity_scores(comment_text)
 
@@ -255,16 +301,19 @@ def analyze_sentiment(comment_text):
     if sentiment_scores['compound'] > 0.25:
         sentiment = "Positive"
     else:
-        sentiment = "Negative"  # Neutral sentiment will return None
+        sentiment = "Negative"  # Consider neutral as negative for default responses
 
     return sentiment
+
 
 # Load events from file on startup
 load_events_from_file()
 
+
 @app.get("/ping")
 def ping():
     return {"message": "Server is active"}
+
 
 @app.get("/health")
 async def health_check():
@@ -319,49 +368,6 @@ async def verify_webhook(
     logger.error("Webhook verification failed")
     raise HTTPException(status_code=403, detail="Verification failed")
 
-message_queue = {}
-@celery.task(name="send_dm")
-def send_dm(message_queue):
-    try:
-        for conversation_id, messages in message_queue.items():
-            if not messages:
-                continue
-
-            # Get recipient ID from the first message
-            recipient_id = messages[0]["sender_id"]
-
-            # Combine all messages from the same conversation
-            combined_text = "\n".join([msg["text"] for msg in messages])
-
-            # Generate response using LLM (assuming llm_response function exists)
-            try:
-                response = llm_response(gemini_api_key,model_name,combined_text)
-            except Exception as e:
-                logger.error(f"Error generating LLM response: {e}")
-                sentiment = analyze_sentiment(combined_text)
-                if sentiment == "Positive":
-                    message_to_be_sent = default_dm_response_positive
-                    return message_to_be_sent
-                else:
-                    message_to_be_sent = default_dm_response_negative
-                    return message_to_be_sent
-
-            # Send the combined response
-            try:
-                result = postmsg(access_token, recipient_id, response)
-                logger.info(f"Sent combined response to {recipient_id}. Result: {result}")
-            except Exception as e:
-                logger.error(f"Error sending message to {recipient_id}: {e}")
-
-        return {"status": "success", "processed_conversations": len(message_queue)}
-
-    except Exception as e:
-        logger.error(f"Error in send_dm task: {e}")
-        raise
-    finally:
-        # Clear the message queue after processing
-        message_queue.clear()
-
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -386,30 +392,38 @@ async def webhook(request: Request):
             logger.info(json.dumps(event, indent=2))
 
             # Handle different types of events
-            if event["type"] == "direct_message" and event["recipient_id"] == account_id and event["is_echo"] == False:
-                # Analyze sentiment of the message
-#                sentiment = analyze_sentiment(event["text"])
-#                if sentiment == "Positive":
-#                    message_to_be_sent = default_dm_response_positive
-#                else:
-#                    message_to_be_sent = default_dm_response_negative
-#
-#                # Schedule the DM task
-#                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
-#                send_delayed_dm.apply_async(
-#                    args=(access_token, event["sender_id"], message_to_be_sent),
-#                    countdown=delay, expires=delay+60
-#                )
-                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
-                conversation_id = str(event["sender_id"]) + "_" + str(event["recipient_id"]) # Corrected variable name
+            if event["type"] == "direct_message" and event["is_echo"] == False:
+                conversation_id = str(event["sender_id"]) + "_" + str(event["recipient_id"])
 
                 if conversation_id not in message_queue:
-                    message_queue[conversation_id] = []
-                message_queue[conversation_id].append(event)
+                    # New conversation
+                    message_queue[conversation_id] = [event]
+                    delay = random.randint(1 * 60, 2 * 60)  # Initial delay (1-2 minutes)
+                    task = send_dm.apply_async(
+                        args=(conversation_id, message_queue.copy()),  # Pass conversation_id and snapshot
+                        countdown=delay, expires=delay + 60
+                    )
+                    conversation_task_schedules[conversation_id] = task.id  # Track scheduled task ID
+                    logger.info(f"Scheduled initial DM task for new conversation: {conversation_id}, task_id: {task.id}, delay: {delay}s")
 
-                if len(message_queue[conversation_id]) == 1 : # trigger only when first message comes
-                    send_dm.apply_async(args = (message_queue,), countdown = delay, expires=delay+60)
-                    logger.info(f"Scheduled DM task for sender {event['sender_id']} in {delay} seconds")
+                else:
+                    # Existing conversation - add new message and re-schedule
+                    message_queue[conversation_id].append(event)
+                    logger.info(f"Added message to existing conversation: {conversation_id}")
+
+                    # Re-schedule send_dm task with a shorter delay upon new message
+                    if conversation_id in conversation_task_schedules:
+                        task_id_to_extend = conversation_task_schedules[conversation_id]
+                        celery.control.revoke(task_id_to_extend, terminate=False)  # Cancel existing task
+                        del conversation_task_schedules[conversation_id]  # Remove old task ID
+
+                        new_delay = 30  # Shorter delay for re-scheduling (e.g., 30 seconds)
+                        new_task = send_dm.apply_async(
+                            args=(conversation_id, message_queue.copy()),  # Re-schedule with updated queue
+                            countdown=new_delay, expires=new_delay + 60
+                        )
+                        conversation_task_schedules[conversation_id] = new_task.id  # Track new task ID
+                        logger.info(f"Re-scheduled DM task for conversation: {conversation_id}, task_id: {new_task.id}, new delay: {new_delay}s (due to new message)")
 
 
             elif event["type"] == "comment" and event["from_id"] != account_id:
@@ -424,10 +438,9 @@ async def webhook(request: Request):
                 delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_reply.apply_async(
                     args=(access_token, event["comment_id"], message_to_be_sent),
-                    countdown=delay,expires=delay+60
+                    countdown=delay, expires=delay + 60
                 )
                 logger.info(f"Scheduled reply task for comment {event['comment_id']} in {delay} seconds")
-
 
         # Store event and notify clients
         WEBHOOK_EVENTS.append(event_with_time)
@@ -441,6 +454,7 @@ async def webhook(request: Request):
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
 
 @app.get("/webhook_events")
 async def get_webhook_events():
