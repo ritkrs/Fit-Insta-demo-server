@@ -32,7 +32,7 @@ load_dotenv()
 # Initialize FastAPI app
 app = FastAPI(title="Meta Webhook Server")
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
