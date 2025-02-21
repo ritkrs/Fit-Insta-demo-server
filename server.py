@@ -402,14 +402,17 @@ async def webhook(request: Request):
 #                    args=(access_token, event["sender_id"], message_to_be_sent),
 #                    countdown=delay, expires=delay+60
 #                )
-                temp = event["sender_id"] + event["reciver_id"]
-                if message_queue[temp] is None:
-                    message_queue[temp] = [event]
-                else:
-                    message_queue[temp].push(event)
-                if len(message_queue) == 1 and len(next(iter(message_queue.values()))) == 1:
-                    send_dm.apply_async(args = (message_queue),countdown = delay, expires=delay+60)
+                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
+                conversation_id = str(event["sender_id"]) + "_" + str(event["recipient_id"]) # Corrected variable name
+
+                if conversation_id not in message_queue:
+                    message_queue[conversation_id] = []
+                message_queue[conversation_id].append(event)
+
+                if len(message_queue[conversation_id]) == 1 : # trigger only when first message comes
+                    send_dm.apply_async(args = (message_queue,), countdown = delay, expires=delay+60)
                     logger.info(f"Scheduled DM task for sender {event['sender_id']} in {delay} seconds")
+
 
             elif event["type"] == "comment" and event["from_id"] != account_id:
                 # Analyze sentiment of the comment
@@ -479,6 +482,6 @@ async def events(request: Request):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
