@@ -413,7 +413,7 @@ async def webhook(request: Request):
             if event["type"] == "direct_message" and event["is_echo"] == False:
                 conversation_id = str(event["sender_id"]) + "_" + str(event["recipient_id"])
                 now = datetime.now()
-                conversation_timeout = timedelta(minutes=10)
+                conversation_timeout = timedelta(minutes=5)
 
                 if conversation_id not in conversation_start_times:
                     # New conversation
@@ -480,7 +480,7 @@ async def webhook(request: Request):
                     message_to_be_sent = default_comment_response_negative
 
                 # Schedule the reply task
-                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(1 * 60, 1.5 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_reply.apply_async(
                     args=(access_token, event["comment_id"], message_to_be_sent),
                     countdown=delay, expires=delay + 60
