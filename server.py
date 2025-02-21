@@ -147,7 +147,7 @@ def llm_response(text):
             ],
         })
     )
-    return response.json()["choices"][0]["message"]["content"]
+    return response.choices[0].message.content
 
 def postmsg(access_token, recipient_id, message_to_be_sent):
     url = "https://graph.instagram.com/v21.0/me/messages"
@@ -384,7 +384,7 @@ async def webhook(request: Request):
             logger.info(json.dumps(event, indent=2))
 
             # Handle different types of events
-            if event["type"] == "direct_message" and event["is_echo"] == False:
+            if event["type"] == "direct_message" and event["sender_id"] != account_id and event["is_echo"] == False:
                 # Analyze sentiment of the message
 #                sentiment = analyze_sentiment(event["text"])
 #                if sentiment == "Positive":
