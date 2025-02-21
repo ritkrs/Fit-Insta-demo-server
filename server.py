@@ -25,7 +25,7 @@ import random
 # Download required data (only once)
 nltk.download('vader_lexicon')
 
-from dotenv import load_dotenv
+load_dotenv()
 
 # Configure logging
 
@@ -51,6 +51,7 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 # Store SSE clients
 CLIENTS: List[asyncio.Queue] = []
 
+# Webhook Credentials
 APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 INSTAGRAM_ACCESS_TOKEN = os.getenv(
