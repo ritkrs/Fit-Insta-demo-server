@@ -1,17 +1,30 @@
 import requests
+import json
 
-# Meta App + Instagram Variables
-ig_user_id = "17841472117168408"
-app_id = "629232336425571"
-app_secret = "e18fff02092b87e138b6528ccfa4a1ce"
-user_access_token = "EAAHxwjnB7HABOzlRZCo5IZCD8YR5h2At8A0MkOhUnWcwuO71S5mv12Jq1kztpDE462TBhRJmuIk7m4DflPDxRTi0TsNHZCZBuZBPPh6TgojaPrEU7Bpi15ZB6SssYuZBruP9R9MrZCTkVpwy3cyZCjGFsWZA2L5UdZCNcDNTMCUA0jANOZAoihjMbVzoMaC7IkfE5ZA7TWAvnACMRKQJ2WDMKNMtK3odBcgZDZD"
+gemini_api_key = "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE"
+model_name = "gemini-1.5-flash"
 
-# Get Long Access Token
-url = f"https://graph.facebook.com/v17.0/oauth/access_token?grant_type=fb_exchange_token&client_id={app_id}&client_secret={app_secret}&fb_exchange_token={user_access_token}"
+with open("system_prompt.txt", "r") as file:
+        system_prompt = file.read().strip()
 
-response = requests.get(url)
-
-# Extract long-lived access token
-long_access_token = response.json()
-
-print(long_access_token)
+def llm_response(api_key, model_name, query):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    prompt_text = f"""
+    {system_prompt} Message/Conversation sent by user: {query}
+    """
+    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.ok:
+            response_json = response.json()
+            if 'candidates' in response_json and response_json['candidates']:
+                return response_json['candidates'][0]['content']['parts'][0]['text']
+            else:
+                return "No candidates found in the response."
+        else:
+            return f"Error: {response.status_code}\n{response.text}"
+    except Exception as e:
+        return f"An error occurred: {str(e)}"
+    
+print(llm_response(gemini_api_key, model_name, "Hey your content has been great for the past few days , what happened?"))

@@ -56,7 +56,8 @@ APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
 access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"  # Replace with your actual token
 account_id = "17841472117168408"  # Replace
-openrouter_mistaralnemo_api_key = "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"
+gemini_api_key = "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE"
+model_name = "gemini-1.5-flash"
 
 default_dm_response_positive = "Thanks for the message, we appreciate it!"
 default_dm_response_negative = "We apologize for any mistakes on our part. Please reach out to us at mail_id@email.com for further assistance."
@@ -121,33 +122,28 @@ def load_events_from_file():
         except Exception as e:
             logger.error(f"Failed to load events from file: {e}")
 
-def llm_response(text):
+def llm_response(api_key, model_name, query):
     with open("system_prompt.txt", "r") as file:
         system_prompt = file.read().strip()
 
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": "Bearer " + openrouter_mistaralnemo_api_key,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "",  # Optional. Site URL for rankings on openrouter.ai.
-            "X-Title": "",  # Optional. Site title for rankings on openrouter.ai.
-        },
-        data=json.dumps({
-            "model": "mistralai/mistral-nemo:free",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": text
-                }
-            ],
-        })
-    )
-    return response.choices[0].message.content
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    prompt_text = f"""
+    {system_prompt} Message/Conversation sent by user: {query}
+    """
+    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.ok:
+            response_json = response.json()
+            if 'candidates' in response_json and response_json['candidates']:
+                return response_json['candidates'][0]['content']['parts'][0]['text']
+            else:
+                return Exception("No candidates found in the response.")
+        else:
+            return Exception(f"Error: {response.status_code}\n{response.text}")
+    except Exception as e:
+        return Exception(f"An error occurred: {str(e)}")
 
 def postmsg(access_token, recipient_id, message_to_be_sent):
     url = "https://graph.instagram.com/v21.0/me/messages"
@@ -339,10 +335,16 @@ def send_dm(message_queue):
 
             # Generate response using LLM (assuming llm_response function exists)
             try:
-                response = llm_response(combined_text)
+                response = llm_response(gemini_api_key,model_name,combined_text)
             except Exception as e:
                 logger.error(f"Error generating LLM response: {e}")
-                response = default_dm_response_positive  # Fallback response
+                sentiment = analyze_sentiment(combined_text)
+                if sentiment == "Positive":
+                    message_to_be_sent = default_dm_response_positive
+                    return message_to_be_sent
+                else:
+                    message_to_be_sent = default_dm_response_negative
+                    return message_to_be_sent
 
             # Send the combined response
             try:
