@@ -60,7 +60,7 @@ INSTAGRAM_ACCESS_TOKEN = os.getenv(
 )
 INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "17841472117168408")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
 
 default_dm_response_positive = "Thanks for your kind words! We appreciate your support."
 default_dm_response_negative = "We are sorry to hear you're not satisfied. Please tell us more about this so that we can improve."
