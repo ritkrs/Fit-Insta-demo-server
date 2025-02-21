@@ -32,7 +32,7 @@ load_dotenv()
 # Initialize FastAPI app
 app = FastAPI(title="Meta Webhook Server")
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,7 +69,7 @@ WEBHOOK_FILE = "webhook_events.json"
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")  # Use environment variable
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")  # and sensible defaults
 
-celery = Celery(__name__, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+celery = Celery(_name_, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 celery.conf.update(
     task_serializer='json',
     accept_content=['json'],
@@ -295,6 +295,35 @@ async def verify_webhook(
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
+PENDING_DM = {}
+
+GROUPING_WINDOW = 30
+
+async def send_grouped_dm(sender_id: str):
+    try:
+        await asyncio.sleep(GROUPING_WINDOW)
+    except asyncio.CancelledError:
+        return
+
+    pending = PENDING_DM.get(sender_id)
+    if not pending:
+        return  # No pending DM found.
+
+    messages = pending.get("messages", [])
+    sentiments = [analyze_sentiment(msg["text"]) for msg in messages if msg.get("text")]
+    aggregated_sentiment = "Positive" if sentiments and all(s == "Positive" for s in sentiments) else "Negative"
+
+    if aggregated_sentiment == "Positive":
+        message_to_be_sent = default_dm_response_positive
+    else:
+        message_to_be_sent = default_dm_response_negative
+
+    send_delayed_dm.delay(access_token, sender_id, message_to_be_sent)
+    logger.info(f"Sending grouped DM to {sender_id} for {len(messages)} messages. Sent: {message_to_be_sent}")
+
+    PENDING_DM.pop(sender_id, None)
+
+
 @app.post("/webhook")
 async def webhook(request: Request):
     """Handle incoming webhook events from Meta."""
@@ -316,23 +345,26 @@ async def webhook(request: Request):
         logger.info("Parsed Webhook Events:")
         for event in parsed_events:
             logger.info(json.dumps(event, indent=2))
-
-            # Handle different types of events
+            direct_message = {}
             if event["type"] == "direct_message" and event["is_echo"] == False:
-                # Analyze sentiment of the message
-                sentiment = analyze_sentiment(event["text"])
-                if sentiment == "Positive":
-                    message_to_be_sent = default_dm_response_positive
-                else:
-                    message_to_be_sent = default_dm_response_negative
+                sender_id = event["sender_id"]
 
-                # Schedule the DM task
-                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
-                send_delayed_dm.apply_async(
-                    args=(access_token, event["sender_id"], message_to_be_sent),
-                    countdown=delay, expires=delay+60
-                )
-                logger.info(f"Scheduled DM task for sender {event['sender_id']} in {delay} seconds")
+                # Update grouping info in PENDING_DM
+                if sender_id not in PENDING_DM:
+                    # Create a new grouping entry if none exists.
+                    PENDING_DM[sender_id] = {
+                        "messages": [event],
+                        "task": None
+                    }
+                else:
+                    PENDING_DM[sender_id]["messages"].append(event)
+                    task = PENDING_DM[sender_id].get("task")
+                    if task and not task.done():
+                        task.cancel()
+
+                PENDING_DM[sender_id]["task"] = asyncio.create_task(send_grouped_dm(sender_id))
+                logger.info(f"Updated pending DM grouping for sender {sender_id}. Total messages in group: {len(PENDING_DM[sender_id]['messages'])}")
+
 
             elif event["type"] == "comment" and event["from_id"] != account_id:
                 # Analyze sentiment of the comment
@@ -402,6 +434,6 @@ async def events(request: Request):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
