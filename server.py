@@ -408,7 +408,8 @@ async def webhook(request: Request):
                 if conversation_id not in message_queue:
                     # New conversation
                     message_queue[conversation_id] = [event]
-                    delay = random.randint(1 * 60, 2 * 60)  # Initial delay (1-2 minutes)
+                    # delay = random.randint(1 * 60, 2 * 60)  # Initial delay (1-2 minutes)
+                    delay = random.randint(0,60)
                     task = send_dm.apply_async(
                         args=(conversation_id, message_queue.copy()),  # Pass conversation_id and snapshot
                         countdown=delay, expires=delay + 60
@@ -430,7 +431,7 @@ async def webhook(request: Request):
                         new_delay = 30  # Shorter delay for re-scheduling (e.g., 30 seconds)
                         new_task = send_dm.apply_async(
                             args=(conversation_id, message_queue.copy()),  # Re-schedule with updated queue
-                            countdown=new_delay, expires=new_delay + 60
+                            countdown=new_delay, expires=new_delay + 600
                         )
                         conversation_task_schedules[conversation_id] = new_task.id  # Track new task ID
                         logger.info(f"Re-scheduled DM task for conversation: {conversation_id}, task_id: {new_task.id}, new delay: {new_delay}s (due to new message)")
@@ -445,10 +446,11 @@ async def webhook(request: Request):
                     message_to_be_sent = default_comment_response_negative
 
                 # Schedule the reply task
-                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
+                # delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(0,60)
                 send_delayed_reply.apply_async(
                     args=(access_token, event["comment_id"], message_to_be_sent),
-                    countdown=delay, expires=delay + 60
+                    countdown=delay, expires=delay + 600
                 )
                 logger.info(f"Scheduled reply task for comment {event['comment_id']} in {delay} seconds")
 
