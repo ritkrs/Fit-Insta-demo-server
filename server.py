@@ -33,7 +33,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 # Initialize FastAPI app
 app = FastAPI(title="Meta Webhook Server")
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -74,7 +74,7 @@ CELERY_RESULT_BACKEND = 'cache+memory://'
 # -------------------------------------------------
 
 
-celery = Celery(_name_, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+celery = Celery(__name__, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 celery.conf.update(
     task_serializer='json',
     accept_content=['json'],
@@ -507,6 +507,6 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
