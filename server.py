@@ -26,7 +26,7 @@ import random
 nltk.download('vader_lexicon')
 
 load_dotenv()
-BASE_DIR = os.path.dirname(os.path.abspath(_file_))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 # Configure logging
 
@@ -507,6 +507,6 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
