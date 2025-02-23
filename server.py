@@ -22,9 +22,6 @@ import nltk
 from celery import Celery
 import random
 
-# Download required data (only once)
-nltk.download('vader_lexicon')
-
 load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -508,4 +505,4 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
