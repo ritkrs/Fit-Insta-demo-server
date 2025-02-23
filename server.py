@@ -22,6 +22,8 @@ import nltk
 from celery import Celery
 import random
 
+nltk.download('vader_lexicon')
+
 load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
