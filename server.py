@@ -26,13 +26,14 @@ import random
 nltk.download('vader_lexicon')
 
 load_dotenv()
-
+BASE_DIR = os.path.dirname(os.path.abspath(_file_))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
 # Configure logging
 
 # Initialize FastAPI app
 app = FastAPI(title="Meta Webhook Server")
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,15 +53,13 @@ WEBHOOK_EVENTS = deque(maxlen=100)
 CLIENTS: List[asyncio.Queue] = []
 
 # Webhook Credentials
-APP_SECRET = os.getenv("APP_SECRET", "e18fff02092b87e138b6528ccfa4a1ce")
+APP_SECRET = os.getenv("APP_SECRET", "d928c83e7f4c38a67017f44887b55668")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "fitvideodemo")
-INSTAGRAM_ACCESS_TOKEN = os.getenv(
-    "INSTAGRAM_ACCESS_TOKEN",
-    "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"
-)
-INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "17841472117168408")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE")
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
+access_token = "IGAAI8SJHk0mNBZAFB6TF9zejQtcnoyWWlOaGRSaEJyRGlfTXVUMEdveGJiVURXRXNlOUUwZA0QwQ2w4ZAi1HVE5mM2tqdk1jYW94VHVQbHdnWUx1NVduTHg1QzRMY1BzMVdqaEpId3B3X0JxNzM4dWJmWGtsWnZAKb1p4SnNiRzFMZAwZDZD"  # Replace with your actual token
+account_id = "17841472117168408"  # Replace
+gemini_api_key = os.getenv("GEMINI_API_KEY","AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE")
+gemini_api_key = "AIzaSyDgH-W60Vk--3rSbTq91lzYoMfc1j1RzFE"
+model_name = "gemini-1.5-flash"
 
 default_dm_response_positive = "Thanks for your kind words! We appreciate your support."
 default_dm_response_negative = "We are sorry to hear you're not satisfied. Please tell us more about this so that we can improve."
@@ -69,12 +68,13 @@ default_comment_response_negative = "We are sorry to hear you're not satisfied. 
 # Save Webhook Events to JSON File
 WEBHOOK_FILE = "webhook_events.json"
 
+# --- MODIFICATION: In-Memory Broker and Backend ---
+CELERY_BROKER_URL = 'memory://'
+CELERY_RESULT_BACKEND = 'cache+memory://'
+# -------------------------------------------------
 
-# --- Celery Setup ---
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")  # Use environment variable
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")  # and sensible defaults
 
-celery = Celery(__name__, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+celery = Celery(_name_, broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 celery.conf.update(
     task_serializer='json',
     accept_content=['json'],
@@ -85,7 +85,6 @@ celery.conf.update(
 
 message_queue = {}  # Store messages per conversation_id
 conversation_task_schedules = {}  # Track scheduled task IDs per conversation
-conversation_start_times = {} # Track conversation start times
 
 
 @celery.task(name="send_dm")
@@ -113,7 +112,7 @@ def send_dm(conversation_id_to_process, message_queue_snapshot):  # Pass convers
         system_prompt_content = ""
         with open("system_prompt.txt", "r") as file:
             system_prompt_content = file.read().strip()
-        full_prompt = system_prompt_content + " Message/Conversation input from user: " + combined_text
+        full_prompt = system_prompt_content + " Message/Conversation input from user: " + combined_text + " "
 
 
         # Generate response using LLM
@@ -143,11 +142,6 @@ def send_dm(conversation_id_to_process, message_queue_snapshot):  # Pass convers
         # Clear task schedule after successful processing
         if conversation_id_to_process in conversation_task_schedules:
             del conversation_task_schedules[conversation_id_to_process]
-
-        # Clear conversation start time after processing
-        if conversation_id_to_process in conversation_start_times:
-            del conversation_start_times[conversation_id_to_process]
-
 
         return {"status": "success", "processed_conversation": conversation_id_to_process, "message_count": len(messages)}
 
@@ -381,7 +375,7 @@ async def verify_webhook(
 
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         logger.info("Webhook verification successful")
-        return Response(content=hub_challenge, media_type="text/plain")
+        return Response(content=hub_challenge, media_type="text/html")
 
     logger.error("Webhook verification failed")
     raise HTTPException(status_code=403, detail="Verification failed")
@@ -412,12 +406,9 @@ async def webhook(request: Request):
             # Handle different types of events
             if event["type"] == "direct_message" and event["is_echo"] == False:
                 conversation_id = str(event["sender_id"]) + "_" + str(event["recipient_id"])
-                now = datetime.now()
-                conversation_timeout = timedelta(minutes=5)
 
-                if conversation_id not in conversation_start_times:
+                if conversation_id not in message_queue:
                     # New conversation
-                    conversation_start_times[conversation_id] = now
                     message_queue[conversation_id] = [event]
                     delay = random.randint(1 * 60, 2 * 60)  # Initial delay (1-2 minutes)
                     task = send_dm.apply_async(
@@ -428,47 +419,23 @@ async def webhook(request: Request):
                     logger.info(f"Scheduled initial DM task for new conversation: {conversation_id}, task_id: {task.id}, delay: {delay}s")
 
                 else:
-                    # Existing conversation - check for timeout
-                    start_time = conversation_start_times[conversation_id]
-                    if now - start_time > conversation_timeout:
-                        # Conversation timed out - refresh
-                        logger.info(f"Conversation {conversation_id} timed out. Refreshing.")
-                        if conversation_id in message_queue:
-                            del message_queue[conversation_id] # Clear existing messages
-                        conversation_start_times[conversation_id] = now # Reset start time
-                        if conversation_id in conversation_task_schedules:
-                            task_id_to_extend = conversation_task_schedules[conversation_id]
-                            celery.control.revoke(task_id_to_extend, terminate=False)  # Cancel existing task
-                            del conversation_task_schedules[conversation_id] # Remove old task ID
-                        message_queue[conversation_id] = [event] # Start with the new message
+                    # Existing conversation - add new message and re-schedule
+                    message_queue[conversation_id].append(event)
+                    logger.info(f"Added message to existing conversation: {conversation_id}")
 
-                    else:
-                        # Conversation within timeout - add new message and re-schedule
-                        message_queue[conversation_id].append(event)
-                        logger.info(f"Added message to existing conversation: {conversation_id}")
+                    # Re-schedule send_dm task with a shorter delay upon new message
+                    if conversation_id in conversation_task_schedules:
+                        task_id_to_extend = conversation_task_schedules[conversation_id]
+                        celery.control.revoke(task_id_to_extend, terminate=False)  # Cancel existing task
+                        del conversation_task_schedules[conversation_id]  # Remove old task ID
 
-                        # Re-schedule send_dm task with a shorter delay upon new message
-                        if conversation_id in conversation_task_schedules:
-                            task_id_to_extend = conversation_task_schedules[conversation_id]
-                            celery.control.revoke(task_id_to_extend, terminate=False)  # Cancel existing task
-                            del conversation_task_schedules[conversation_id]  # Remove old task ID
-
-                            new_delay = 30  # Shorter delay for re-scheduling (e.g., 30 seconds)
-                            new_task = send_dm.apply_async(
-                                args=(conversation_id, message_queue.copy()),  # Re-schedule with updated queue
-                                countdown=new_delay, expires=new_delay + 60
-                            )
-                            conversation_task_schedules[conversation_id] = new_task.id  # Track new task ID
-                            logger.info(f"Re-scheduled DM task for conversation: {conversation_id}, task_id: {new_task.id}, new delay: {new_delay}s (due to new message)")
-                    if conversation_id not in conversation_task_schedules and conversation_id in message_queue and message_queue[conversation_id]:
-                        # Schedule a new task if no task is scheduled and there are messages in the queue after refresh or timeout handling.
-                        delay = random.randint(1 * 60, 2 * 60)  # Initial delay (1-2 minutes) for refreshed conversation or if no task was scheduled before.
-                        task = send_dm.apply_async(
-                            args=(conversation_id, message_queue.copy()),
-                            countdown=delay, expires=delay + 60
+                        new_delay = 30  # Shorter delay for re-scheduling (e.g., 30 seconds)
+                        new_task = send_dm.apply_async(
+                            args=(conversation_id, message_queue.copy()),  # Re-schedule with updated queue
+                            countdown=new_delay, expires=new_delay + 60
                         )
-                        conversation_task_schedules[conversation_id] = task.id
-                        logger.info(f"Scheduled DM task for conversation {conversation_id} after refresh/timeout, task_id: {task.id}, delay: {delay}s")
+                        conversation_task_schedules[conversation_id] = new_task.id  # Track new task ID
+                        logger.info(f"Re-scheduled DM task for conversation: {conversation_id}, task_id: {new_task.id}, new delay: {new_delay}s (due to new message)")
 
 
             elif event["type"] == "comment" and event["from_id"] != account_id:
@@ -480,7 +447,7 @@ async def webhook(request: Request):
                     message_to_be_sent = default_comment_response_negative
 
                 # Schedule the reply task
-                delay = random.randint(1 * 60, 1.5 * 60)  # 10 to 25 minutes in seconds
+                delay = random.randint(1 * 60, 2 * 60)  # 10 to 25 minutes in seconds
                 send_delayed_reply.apply_async(
                     args=(access_token, event["comment_id"], message_to_be_sent),
                     countdown=delay, expires=delay + 60
@@ -536,9 +503,10 @@ async def events(request: Request):
 
 
 # Serve static HTML
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-if __name__ == "__main__":
+
+if _name_ == "_main_":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
